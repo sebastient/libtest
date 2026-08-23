@@ -1,0 +1,24 @@
+# The C-ABI logic layer over crate `a`'s STATIC backend, as ordinary
+# (un-mangled) `extern "C"` functions plus the error machinery.
+#
+# Why this crate exists: two consumers need identical C-ABI bodies over the
+# embedded implementation — `a-capi` (which exports them as liba.so's
+# symbols) and `a-py`'s self-contained build (which puts them in the capsule
+# vtable, where nothing is linked by the OS at all). They cannot share code
+# by one depending on the other: a-capi is a cdylib leaf whose `#[no_mangle]`
+# symbols must never enter another module's binary. An rlib in the middle is
+# the only place the logic can live once.
+[package]
+name = "a-cshim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+a = { path = "../a", default-features = false, features = ["static"] }
+a-abi = { path = "../a-abi" }
+a-rt = { path = "../a-rt" }
+
+[lints]
+workspace = true

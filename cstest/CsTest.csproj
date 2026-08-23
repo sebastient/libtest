@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <!-- Generated wrappers use unsafe/fixed. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>cstest</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- TWO independently generated BoltFFI modules compiled side by side:
+         namespaces Amod and Bmod, each P/Invoking its own native library. -->
+    <Compile Include="../crates/a-mod/dist/csharp/*.cs" />
+    <Compile Include="../crates/b-mod/dist/csharp/*.cs" />
+  </ItemGroup>
+</Project>

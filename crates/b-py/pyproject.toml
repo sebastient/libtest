@@ -1,0 +1,27 @@
+# Wheel packaging for the SELF-CONTAINED deployment variant. This module
+# links nothing: it reaches A's implementation only through the `_C_API`
+# capsule's function table (the `vtable` backend), so its wheel depends on
+# the `a` wheel at the PYTHON level and at no other.
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "b"
+version = "0.1.0"
+description = "Component B: consumes a.A objects through a's PyCapsule"
+requires-python = ">=3.9"
+dependencies = ["a"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+module-name = "b.b"
+# An explicit package wrapper (python/) instead of maturin's generated one,
+# plus PEP 561 typing metadata. See python/b/__init__.py for why the
+# wrapper is written out.
+python-source = "python"
+no-default-features = true
+features = ["vtable"]

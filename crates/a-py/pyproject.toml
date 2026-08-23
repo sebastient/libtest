@@ -1,0 +1,32 @@
+# Wheel packaging for the SELF-CONTAINED deployment variant: this module
+# embeds A's implementation (crate `a`'s static backend) and requires no
+# liba.so at run time, which is what makes it installable from PyPI on its
+# own. The shared-library variant is a system-packaging story instead — it
+# needs liba.so installed and versioned by the OS package manager, not
+# vendored into a wheel.
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "a"
+version = "0.1.0"
+description = "Component A: the one home of the a.A Python type"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+module-name = "a.a"
+# An explicit package wrapper (python/) instead of maturin's generated one,
+# plus PEP 561 typing metadata. See python/a/__init__.py for why the
+# wrapper is written out.
+python-source = "python"
+# The self-contained variant, spelled out: default features select the
+# `dynamic` backend, which would link liba.so and defeat the purpose.
+no-default-features = true
+features = ["static"]
+# abi3-py311 (see Cargo.toml): ONE wheel serves 3.11+. The floor is set by
+# the buffer-protocol slots, not by preference.

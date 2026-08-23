@@ -1,0 +1,12 @@
+[package]
+name = "amod"
+crate = "amod"
+version = "0.1.0"
+description = "libtest module A — multi-module C#/.NET prototype"
+
+[targets.csharp]
+enabled = true
+namespace = "Amod"
+package_id = "Amod"
+target_framework = "net8.0"
+runtime_identifiers = ["current", "win-x64"]

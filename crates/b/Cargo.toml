@@ -1,0 +1,17 @@
+[package]
+name = "b"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+a = { path = "../a", default-features = false }
+
+[features]
+default = ["static"]
+static = ["a/static"]
+dynamic = ["a/dynamic"]
+vtable = ["a/vtable"]
+
+[lints]
+workspace = true

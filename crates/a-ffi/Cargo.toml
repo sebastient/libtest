@@ -1,0 +1,11 @@
+[package]
+name = "a-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+a-abi = { path = "../a-abi" }
+
+[lints]
+workspace = true

@@ -1,0 +1,108 @@
+# Standalone package (excluded from the root workspace — see the exclusion
+# note there). The empty [workspace] table stops cargo's upward workspace
+# search; workspace field inheritance is therefore unavailable here.
+[workspace]
+
+[package]
+name = "a-capi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["Sébastien Taylor <sebastien@au-zone.com>"]
+
+[lib]
+name = "a"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Default features → static backend: this cdylib is the sole home of A's code.
+a = { path = "../a" }
+a-abi = { path = "../a-abi" }
+a-cshim = { path = "../a-cshim" }
+
+[features]
+v2 = ["a/v2"]
+# cargo-c insists this feature EXISTS and enables it on every build. In its
+# usual layout it is what switches on the C API inside a library crate; here
+# the whole package IS the C API, so the feature is deliberately empty. The
+# tool's requirement is satisfied without adopting the convention behind it.
+capi = []
+
+# --- cargo-c: release packaging ---
+#
+# cargo-c is adopted for what it is genuinely good at — soname/versioning,
+# the install layout with symlinks, and pkg-config generation — and NOT for
+# its usual convention of hosting the C API inside the library crate behind
+# a `capi` feature. That convention would collapse `a` and `a-capi` into one
+# package and put `#[no_mangle]` symbols back on every Rust consumer's build
+# path, which is the thing this architecture exists to avoid. cargo-c is
+# perfectly happy pointed at a separate leaf package instead.
+[package.metadata.capi]
+min_version = "0.9.0"
+
+[package.metadata.capi.header]
+# Header generation stays with gen-header.sh: our cbindgen.toml carries the
+# opaque-handle exclusions and the doc comments that become the header's
+# ownership/thread contracts, and gen-header.sh then PROVES the result
+# (C11 + C++17 pedantic compile, derived constant check, _Static_assert
+# layout goldens). cargo-c's own cbindgen pass would produce a second,
+# unproven header.
+generation = false
+subdirectory = false
+name = "liba"
+
+# With generation off, the header must be handed to cargo-c explicitly —
+# otherwise it reports "Installing header file" and installs nothing, which
+# is a quiet way to ship a library nobody can compile against.
+[[package.metadata.capi.install.include.asset]]
+from = "../../include/liba.h"
+to = "."
+
+[package.metadata.capi.library]
+# The installed library is `liba.so.MAJOR.MINOR.PATCH` with the usual
+# symlinks. Pre-1.0 caveat, and the reason `versioning` is left on: ld64
+# rejects a 0 major in -compatibility_version, so cargo-c treats MINOR as
+# the compatibility axis until 1.0 — exactly the convention documented in
+# "Released library versioning".
+name = "a"
+versioning = true
+
+[package.metadata.capi.pkg_config]
+name = "liba"
+filename = "liba"
+description = "Component A — C ABI over the single implementation home"
+requires_private = ""
+
+
+[profile.release]
+lto = true
+strip = "debuginfo"
+
+# Size-floor profile: trades the panic shield for size (panic = "abort"
+# means catch_unwind cannot catch — a_test_panic aborts the process).
+[profile.release-small]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+# Excluded packages cannot use `lints.workspace = true` (that requires
+# workspace membership), so the root's lint table is repeated here verbatim.
+# Same tax as the repeated version/edition fields — see "Workspace
+# mechanics" in ARCHITECTURE.md. Keep in sync with the root Cargo.toml.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_lossless = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+pub_underscore_fields = "allow"

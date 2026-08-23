@@ -1,0 +1,19 @@
+# Runtime helpers shared by every cdylib in A's family: the quiet panic hook
+# and the thread-local last-error string.
+#
+# It exists as its OWN crate, depending on nothing, because of a fact that
+# only shows up with several Rust cdylibs in one process: each one links its
+# own copy of libstd, so `std::panic::set_hook` is per-MODULE, not
+# per-process. Every cdylib that wants a quiet hook must install one itself.
+# a-cshim could not serve that role — it pulls in crate `a`'s static
+# backend, and a module like `b-py`'s vtable build must not embed A's
+# implementation at all.
+[package]
+name = "a-rt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

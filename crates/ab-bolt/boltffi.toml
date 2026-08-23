@@ -1,0 +1,30 @@
+[package]
+name = "ab"
+crate = "ab"
+version = "0.1.0"
+description = "libtest dual-library prototype — BoltFFI facade over A and B"
+
+[targets.apple]
+deployment_target = "16.0"
+ios_architectures = ["arm64"]
+simulator_architectures = ["arm64"]
+# macOS slice on: the validation target for this prototype is a host Swift
+# test, not an iOS app.
+include_macos = true
+macos_architectures = ["arm64"]
+
+[targets.apple.swift]
+module_name = "Ab"
+ffi_module_name = "AbNative"
+tools_version = "5.9"
+error_style = "throwing"
+
+[targets.android]
+min_sdk = 29
+architectures = ["arm64"]
+
+[targets.android.kotlin]
+package = "ai.edgefirst.ab"
+module_name = "Ab"
+library = "ab"
+error_style = "throwing"

@@ -1,0 +1,12 @@
+[package]
+name = "bmod"
+crate = "bmod"
+version = "0.1.0"
+description = "libtest module B — multi-module C#/.NET prototype"
+
+[targets.csharp]
+enabled = true
+namespace = "Bmod"
+package_id = "Bmod"
+target_framework = "net8.0"
+runtime_identifiers = ["current", "win-x64"]

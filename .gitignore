@@ -1,0 +1,25 @@
+# Build output. Note that Cargo.lock files ARE committed, including the one
+# per excluded -capi package: pinning each shipped .so's dependency graph
+# independently of the workspace is a deliberate release-engineering
+# property of this architecture, not an accident (see "Workspace mechanics"
+# in ARCHITECTURE.md).
+/target/
+crates/*/target/
+crates/*/target-*/
+
+# Generated language bindings (boltffi) — regenerate with `boltffi build`.
+crates/*/dist/
+
+# Built Python extension modules for the two deployment variants; produced
+# by build-py.sh. The .pyi stubs and test battery beside them are sources.
+py/v1/
+py/v2/
+
+# Python virtualenv, created on demand by build-py.sh.
+/venv/
+
+# .NET build output; the .csproj and Program.cs are sources.
+cstest/bin/
+cstest/obj/
+
+.DS_Store

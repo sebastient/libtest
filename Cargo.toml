@@ -1,0 +1,62 @@
+[workspace]
+resolver = "2"
+# The pure-Rust world: `cargo build --workspace` builds all of this with the
+# default (static) backend — no C API, no shared libraries.
+members = [
+    "crates/a-abi",
+    "crates/a-ffi",
+    "crates/a",
+    "crates/a-cshim",
+    "crates/a-rt",
+    "crates/b",
+    "crates/app",
+]
+# The C API packages are deliberately OUTSIDE the workspace: a-capi needs
+# crate a's `static` backend while b-capi needs `dynamic`, and building them
+# in one cargo invocation would unify those mutually-exclusive features.
+# They are standalone packages built explicitly (see run.sh) with their own
+# Cargo.lock — which also pins the shipped .so builds independently.
+exclude = ["crates/a-capi", "crates/b-capi", "crates/a-py", "crates/b-py", "crates/ab-bolt", "crates/a-mod", "crates/b-mod"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# Declared floor. Features actually relied on: `#[expect]` (1.81),
+# `&raw mut` (1.82), C-string literals (1.77). Verify moves with
+# `cargo msrv verify` before relaxing this.
+rust-version = "1.85"
+authors = ["Sébastien Taylor <sebastien@au-zone.com>"]
+
+# Lint baseline. NOTE the workspace mechanics consequence: the -capi/-py/
+# bolt packages are EXCLUDED from this workspace, and excluded packages
+# cannot use `lints.workspace = true` — each repeats this table verbatim.
+# That duplication is the same tax as the repeated version/edition fields
+# (see "Workspace mechanics" in ARCHITECTURE.md).
+[workspace.lints.rust]
+# The highest-value lint for this codebase: inside an `unsafe fn`, unsafe
+# operations must still sit in an explicit `unsafe {}` block. Without it the
+# signature blanket-covers the whole body and the genuinely dangerous lines
+# become invisible.
+unsafe_op_in_unsafe_fn = "deny"
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Carve-outs, each for a reason that holds repo-wide:
+# ABI code casts deliberately, at contract-defined widths.
+cast_possible_truncation = "allow"
+cast_lossless = "allow"
+# This is a reference implementation to be read, not a library API to be
+# consumed — #[must_use] and Errors/Panics doc sections would be noise.
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `a`, `b`, `a-abi` are deliberately terse contract names.
+module_name_repetitions = "allow"
+# `_reserved` / `_pad` are REQUIRED public ABI padding, not accidents.
+pub_underscore_fields = "allow"
+
+[profile.release]
+lto = true
+strip = "debuginfo"

@@ -1,0 +1,16 @@
+[package]
+name = "app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Pure-Rust consumer: default (static) features. Cargo unifies the graph so
+# exactly ONE copy of A's implementation exists in the binary, and there is
+# no runtime dependency on liba.so/libb.so.
+a = { path = "../a" }
+b = { path = "../b" }
+a-abi = { path = "../a-abi" }
+
+[lints]
+workspace = true

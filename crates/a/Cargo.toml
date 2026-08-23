@@ -1,0 +1,30 @@
+[package]
+name = "a"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+a-abi = { path = "../a-abi" }
+a-ffi = { path = "../a-ffi", optional = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+libc = "0.2"
+
+[features]
+default = ["static"]
+# Backend selection — mutually exclusive (enforced by compile_error):
+#   static  — the implementation is compiled into the consumer (pure Rust path)
+#   dynamic — A is a handle; all access goes through liba.so's C ABI
+static = []
+dynamic = ["dep:a-ffi"]
+# A is a handle and every call dispatches through an AVtableV1 function
+# table installed via `init_vtable` — no OS-level linking to liba (used by
+# Python modules sharing the implementation through a PyCapsule).
+vtable = []
+# Simulates a future version of the implementation: private field added
+# mid-struct + a new field written into the shared reserved area.
+v2 = []
+
+[lints]
+workspace = true

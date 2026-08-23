@@ -1,0 +1,57 @@
+# Standalone package (excluded from the root workspace). NOT part of the
+# architecture — a measuring instrument.
+#
+# The size ladder's bottom rung is "a no_std core", and the honest way to
+# report it is to measure a real no_std cdylib rather than to estimate.
+# Porting `a` itself is not possible without deleting most of what it
+# demonstrates (see the module docs), so this probe implements the smallest
+# credible slice of the same shape — opaque handles, create/destroy,
+# accessors — with no libstd at all. Its size is the floor a Rust cdylib
+# can reach; the gap to `liba` is what libstd costs.
+[workspace]
+
+[package]
+name = "a-nostd-probe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["Sébastien Taylor <sebastien@au-zone.com>"]
+
+[lib]
+name = "anostd"
+crate-type = ["cdylib"]
+
+# no_std needs a panic strategy that requires no unwinder: without it the
+# crate wants an eh_personality lang item that only libstd provides. This
+# applies to EVERY profile, dev included — otherwise `cargo clippy`, which
+# uses dev, fails to build the crate at all.
+[profile.dev]
+panic = "abort"
+
+[profile.release-small]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.release]
+lto = true
+strip = "debuginfo"
+
+# Excluded package: the root lint table repeated (see a-capi).
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_lossless = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+pub_underscore_fields = "allow"
