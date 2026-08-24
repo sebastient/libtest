@@ -10,29 +10,66 @@ crates/*/target-*/
 # Generated language bindings (boltffi) — regenerate with `boltffi build`.
 crates/*/dist/
 
-# Built Python extension modules for the two deployment variants; produced
-# by build-py.sh. The .pyi stubs and test battery beside them are sources.
-py/v1/
-py/v2/
-# Free-threaded builds of the same two variants; produced by build-ft.sh.
-py/ft/
-py/ft2/
+# Built Python extension modules, produced by build-py.sh (v1 shared-liba,
+# v2 capsule-vtable) and build-ft.sh (ft/ft2, the free-threaded pair). The
+# .pyi stubs and test batteries beside them are sources. Globbed so a new
+# variant directory is covered before someone commits one.
+py/v[0-9]*/
+py/ft*/
 
-# Python virtualenvs, created on demand by build-py.sh / build-ft.sh.
-/venv/
-/venv-ft/
+# Python virtualenvs, created on demand by build-py.sh / build-ft.sh. Globbed
+# so a per-interpreter venv (venv-3.13t, say) is covered too.
+/venv*/
 
 # Generated ABI dumps. Deliberately NOT committed: libabigail's XML bakes in
 # absolute build paths and per-codegen-unit hashes, so the file is
 # machine-specific and churns by ~300 lines on changes that abidiff itself
 # correctly reports as no ABI change. Stripping that metadata to stop the
 # churn makes abidiff silently stop detecting real breaks -- see
-# "Full ABI diff" in ARCHITECTURE.md. The hand-written abi/*.abignore
+# "Full ABI diff" in ARCHITECTURE.md. The hand-written *.abignore
 # suppression files ARE sources and are committed.
-abi/*.abi
+*.abi
 
 # .NET build output; the .csproj and Program.cs are sources.
 cstest/bin/
 cstest/obj/
 
+# --- Local scratch -------------------------------------------------------
+#
+# A safety net, not a list of things this repo produces. Everything above is
+# a known build output; everything here is the ad-hoc debris of working on a
+# library like this one, which is what actually gets committed by accident.
+#
+# If you need somewhere to put a throwaway script, a captured artifact, or a
+# previous release you are diffing against, use scratch/ — it is ignored
+# wholesale and never checked.
+/scratch/
+/.scratch/
+
+# Crash and profiling artifacts. This repository deliberately segfaults a
+# harness (the DMA-BUF skip path) and runs it under valgrind and perf, so
+# these appear in the working tree as a matter of course.
+core
+core.*
+vgcore.*
+*.core
+perf.data
+perf.data.old
+*.profraw
+*.profdata
+
+# Patch and backup leftovers. check-abidiff.sh --self-test copies a tracked
+# source file aside before patching it, and merges/rebases drop .orig/.rej.
+*.orig
+*.rej
+*.bak
+*~
+
+# Editor and OS noise.
+.vscode/
+.idea/
+*.swp
+*.swo
+.direnv/
+.envrc
 .DS_Store
