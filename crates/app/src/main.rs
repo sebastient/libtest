@@ -124,7 +124,12 @@ fn main() {
     } else {
         a::A_STORAGE_HEAP
     };
-    if kind != a::A_STORAGE_HEAP {
+    // Unavailable = the kind is real but this machine cannot supply one
+    // (no /dev/dma_heap, or no permission on it). Report and move on; any
+    // other error is still a bug and still panics.
+    if kind != a::A_STORAGE_HEAP && d.set_storage(kind) == Err(a::AStatus::Unavailable) {
+        println!("  (skipped platform storage: unavailable in this environment)");
+    } else if kind != a::A_STORAGE_HEAP {
         d.set_storage(kind).unwrap();
         d.fill(5);
         let fr = d.frame();

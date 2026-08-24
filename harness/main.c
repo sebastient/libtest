@@ -97,6 +97,7 @@ static uint64_t view_checksum(ABufView v) {
 }
 
 static int failures = 0;
+static int skipped = 0;
 #define CHECK(cond, msg)                                                       \
     do {                                                                       \
         if (cond) {                                                            \
@@ -105,6 +106,16 @@ static int failures = 0;
             printf("  FAIL %s\n", msg);                                        \
             failures++;                                                        \
         }                                                                      \
+    } while (0)
+
+/* A platform capability this machine does not offer is not a defect: a CI
+ * container without /dev/dma_heap, or a box without the udev rule, still
+ * has to report the other 100+ results. Distinct from CHECK-with-a-false
+ * condition, which stays a hard failure. */
+#define SKIP(msg)                                                              \
+    do {                                                                       \
+        printf("  skip %s\n", msg);                                            \
+        skipped++;                                                             \
     } while (0)
 
 int main(void) {
@@ -362,7 +373,9 @@ int main(void) {
     CHECK(a_set_frame_storage(d, 99) == A_STATUS_INVALID_ARGUMENT,
           "unsupported pool kind fails eagerly, not per-frame");
 #ifdef __APPLE__
-    {
+    if (a_set_frame_storage(d, A_STORAGE_IOSURFACE) == A_STATUS_UNAVAILABLE) {
+        SKIP("IOSurface frame pool (allocation refused here)");
+    } else {
         CHECK(a_set_frame_storage(d, A_STORAGE_IOSURFACE) == A_STATUS_OK,
               "select IOSurface for emitted frames");
         CHECK(a_frame_storage(d) == A_STORAGE_IOSURFACE, "pool kind reported back");
@@ -392,47 +405,118 @@ int main(void) {
     }
 #endif
 
+#ifdef __linux__
+    /* The emit pool is orthogonal to the producer's own payload kind: this
+     * selects DMA-BUF for frames handed to capture/stream callbacks while
+     * the payload stays heap. Never exercised before Linux hardware was
+     * available. */
+    if (a_set_frame_storage(d, A_STORAGE_DMABUF) == A_STATUS_UNAVAILABLE) {
+        SKIP("DMA-BUF frame pool (no accessible /dev/dma_heap here)");
+    } else {
+        CHECK(a_set_frame_storage(d, A_STORAGE_DMABUF) == A_STATUS_OK,
+              "select DMA-BUF for emitted frames");
+        CHECK(a_frame_storage(d) == A_STORAGE_DMABUF, "pool kind reported back");
+        ABuf *own = a_frame(d);
+        CHECK(a_buf_export(own).kind == A_STORAGE_HEAP,
+              "producer payload kind is unaffected by the pool setting");
+        a_buf_release(own);
+
+        ABuf *_Atomic pooled = NULL;
+        a_capture(d, on_capture, (void *)&pooled);
+        for (int i = 0; i < 1000 && !atomic_load(&pooled); i++)
+            usleep(1000);
+        ABuf *pf = atomic_load(&pooled);
+        CHECK(pf != NULL, "pooled capture completed");
+        if (pf) {
+            AFrameDescV2 cd = a_buf_export2(pf);
+            CHECK(cd.kind == A_STORAGE_DMABUF && cd.fd >= 0,
+                  "captured frame allocated from the DMA-BUF pool");
+            CHECK(cd.fourcc == A_FOURCC_RGBA8888 && cd.stride == 128,
+                  "pooled frame carries the same format/geometry contract");
+            CHECK(a_buf_map(pf).ptr[0] == 0xCA, "pooled frame contents readable");
+            if (cd.fd >= 0)
+                close(cd.fd);
+            a_buf_release(pf);
+        }
+        CHECK(a_set_frame_storage(d, A_STORAGE_HEAP) == A_STATUS_OK, "pool kind reset");
+    }
+#endif
+
 #ifdef __APPLE__
-    CHECK(a_set_storage(d, A_STORAGE_IOSURFACE) == A_STATUS_OK, "switch payload to IOSurface storage");
-    a_fill(d, 5);
-    ABuf *sf = a_frame(d);
-    AFrameDescV1 sd = a_buf_export(sf);
-    CHECK(sd.kind == A_STORAGE_IOSURFACE && sd.id != 0, "IOSurface descriptor has a global ID");
-    IOSurfaceRef looked = IOSurfaceLookup(sd.id);
-    CHECK(looked != NULL, "IOSurfaceLookup resolves the exported ID");
-    IOSurfaceLock(looked, kIOSurfaceLockReadOnly, NULL);
-    const uint8_t *base = IOSurfaceGetBaseAddress(looked);
-    CHECK(base && base[0] == 5 && base[127] == (uint8_t)(5 + 127),
-          "looked-up surface shows liba's bytes (zero-copy)");
-    a_fill(d, 6); /* COW: the snapshot keeps its own surface */
-    CHECK(base[0] == 5 && a_buf_map(sf).ptr[0] == 5,
-          "snapshot surface unchanged after producer COW");
-    CHECK(a_data(d).ptr[0] == 6, "producer landed on a fresh buffer");
-    IOSurfaceUnlock(looked, kIOSurfaceLockReadOnly, NULL);
-    CFRelease(looked);
-    a_buf_release(sf);
+    /* Same skip contract as the DMA-BUF block below: a surface quota that
+     * refuses an allocation is an environment fact, not a defect. */
+    int sst = a_set_storage(d, A_STORAGE_IOSURFACE);
+    if (sst == A_STATUS_UNAVAILABLE) {
+        SKIP("IOSurface payload storage (allocation refused here)");
+    } else {
+        CHECK(sst == A_STATUS_OK, "switch payload to IOSurface storage");
+        a_fill(d, 5);
+        ABuf *sf = a_frame(d);
+        AFrameDescV1 sd = a_buf_export(sf);
+        CHECK(sd.kind == A_STORAGE_IOSURFACE && sd.id != 0,
+              "IOSurface descriptor has a global ID");
+        IOSurfaceRef looked = IOSurfaceLookup(sd.id);
+        CHECK(looked != NULL, "IOSurfaceLookup resolves the exported ID");
+        if (looked) {
+            IOSurfaceLock(looked, kIOSurfaceLockReadOnly, NULL);
+            const uint8_t *base = IOSurfaceGetBaseAddress(looked);
+            CHECK(base && base[0] == 5 && base[127] == (uint8_t)(5 + 127),
+                  "looked-up surface shows liba's bytes (zero-copy)");
+            a_fill(d, 6); /* COW: the snapshot keeps its own surface */
+            CHECK(base && base[0] == 5 && a_buf_map(sf).ptr[0] == 5,
+                  "snapshot surface unchanged after producer COW");
+            CHECK(a_data(d).ptr[0] == 6, "producer landed on a fresh buffer");
+            IOSurfaceUnlock(looked, kIOSurfaceLockReadOnly, NULL);
+            CFRelease(looked);
+        }
+        a_buf_release(sf);
+    }
 #endif
 #ifdef __linux__
-    CHECK(a_set_storage(d, A_STORAGE_DMABUF) == A_STATUS_OK, "switch payload to DMA-BUF storage");
-    a_fill(d, 5);
-    ABuf *sf = a_frame(d);
-    AFrameDescV1 sd = a_buf_export(sf);
-    CHECK(sd.kind == A_STORAGE_DMABUF && sd.fd >= 0, "DMA-BUF descriptor carries a real fd");
-    uint8_t *m = mmap(NULL, sd.len, PROT_READ, MAP_SHARED, sd.fd, 0);
-    CHECK(m != MAP_FAILED, "exported fd mmaps independently");
-    CHECK(m[0] == 5 && m[127] == (uint8_t)(5 + 127),
-          "independent mapping shows liba's bytes (zero-copy)");
-    a_fill(d, 6); /* COW: the snapshot keeps its own dma-buf */
-    CHECK(m[0] == 5 && a_buf_map(sf).ptr[0] == 5,
-          "snapshot dma-buf unchanged after producer COW");
-    CHECK(a_data(d).ptr[0] == 6, "producer landed on a fresh buffer");
-    munmap(m, sd.len);
-    close(sd.fd);
-    a_buf_release(sf);
+    /* A_STATUS_UNAVAILABLE means the kind is real but this machine cannot
+     * supply one (no /dev/dma_heap node, or no permission on it — the
+     * default on desktop distros, where the node is root-only). That is an
+     * environment fact, not a defect, so the block skips rather than fails.
+     * A_STATUS_INVALID_ARGUMENT here would still be a genuine bug and is
+     * still reported as one. */
+    int dst = a_set_storage(d, A_STORAGE_DMABUF);
+    if (dst == A_STATUS_UNAVAILABLE) {
+        SKIP("DMA-BUF payload storage (no accessible /dev/dma_heap here)");
+    } else {
+        CHECK(dst == A_STATUS_OK, "switch payload to DMA-BUF storage");
+        a_fill(d, 5);
+        ABuf *sf = a_frame(d);
+        AFrameDescV1 sd = a_buf_export(sf);
+        CHECK(sd.kind == A_STORAGE_DMABUF && sd.fd >= 0,
+              "DMA-BUF descriptor carries a real fd");
+        /* Nothing below may run on a failed mapping: MAP_FAILED is
+         * (void *)-1, and the old unconditional m[0] segfaulted the whole
+         * harness, discarding every result it had already printed. */
+        uint8_t *m = sd.fd >= 0 ? mmap(NULL, sd.len, PROT_READ, MAP_SHARED, sd.fd, 0)
+                                : MAP_FAILED;
+        CHECK(m != MAP_FAILED, "exported fd mmaps independently");
+        if (m != MAP_FAILED) {
+            CHECK(m[0] == 5 && m[127] == (uint8_t)(5 + 127),
+                  "independent mapping shows liba's bytes (zero-copy)");
+            a_fill(d, 6); /* COW: the snapshot keeps its own dma-buf */
+            CHECK(m[0] == 5 && a_buf_map(sf).ptr[0] == 5,
+                  "snapshot dma-buf unchanged after producer COW");
+            CHECK(a_data(d).ptr[0] == 6, "producer landed on a fresh buffer");
+            munmap(m, sd.len);
+        }
+        if (sd.fd >= 0)
+            close(sd.fd);
+        a_buf_release(sf);
+    }
 #endif
     a_destroy(d);
 
-    printf("\n%s (%d failures)\n", failures ? "RESULT: FAIL" : "RESULT: PASS",
-           failures);
+    if (skipped) {
+        printf("\n%s (%d failures, %d skipped)\n",
+               failures ? "RESULT: FAIL" : "RESULT: PASS", failures, skipped);
+    } else {
+        printf("\n%s (%d failures)\n", failures ? "RESULT: FAIL" : "RESULT: PASS",
+               failures);
+    }
     return failures ? 1 : 0;
 }

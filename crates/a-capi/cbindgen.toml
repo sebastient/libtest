@@ -17,6 +17,7 @@ after_includes = """
 #define A_STATUS_PANIC (-1)
 #define A_STATUS_INVALID_ARGUMENT (-2)
 #define A_STATUS_BUSY (-3)
+#define A_STATUS_UNAVAILABLE (-4)
 
 #define A_ABI_VERSION 1
 #define A_STORAGE_HEAP 0u

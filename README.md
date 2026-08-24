@@ -60,18 +60,62 @@ The pattern is component-shaped, not project-shaped: see [Replicating the patter
 | **.NET (BoltFFI)** | |
 | `crates/a-mod`, `crates/b-mod` | TWO independent C# modules sharing A via raw u64 handles over liba |
 
+## Optional host setup
+
+`run.sh` passes with none of these; each one turns a skipped check into a real one.
+
+| Want | Install | Effect if missing |
+| ------ | --------- | ------------------- |
+| Full ABI diff | `sudo apt install libabigail-tools` | `check-abidiff.sh` skips |
+| Leak check | `sudo apt install valgrind` | `leaks.sh` skips |
+| DMA-BUF storage (Linux) | see below | the platform-storage checks report `skip`, not `FAIL` |
+| Free-threaded Python | `uv python install 3.14t` | `build-ft.sh` skips; the GIL build is unaffected |
+
+`/dev/dma_heap/system` is root-only on a stock desktop distro, so the DMA-BUF checks skip unless the device is made readable — embedded targets ship exactly such a rule:
+
+```sh
+echo 'SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"' | sudo tee /etc/udev/rules.d/99-dma-heap.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG video "$USER"   # log out and back in
+```
+
+To confirm the skip path itself still works, hide the device instead of granting access — the harness must report `PASS (… skipped)`, never a crash:
+
+```sh
+unshare -r -m sh -c 'mount -t tmpfs none /dev/dma_heap && exec ./target/debug/harness'
+```
+
+Free-threading is **optional and rarely necessary**: the Rust side already releases the GIL and the zero-copy path hands frames to numpy, which releases it too, so a numpy-facing workload gains close to nothing. Its real value is installability on free-threaded interpreters, where the abi3 wheel does not exist. See "Free-threading: what it buys, and why most usage does not need it" in ARCHITECTURE.md.
+
+### Running the ABI diff against a real release
+
+`run.sh` runs `./check-abidiff.sh --self-test`, which proves the gate detects a real break and ignores private layout drift. It does **not** compare against a previous release, because this repository is a reference implementation and has none.
+
+A real project supplies that artifact:
+
+```sh
+gh release download v1.2.0 --pattern 'liba.so' --dir /tmp/prev
+./check-abidiff.sh /tmp/prev/liba.so          # or a directory of artifacts
+./check-abidiff.sh --emit /tmp/before         # local before/after snapshot
+```
+
+No `.abi` baseline is committed, deliberately: libabigail's dumps embed absolute build paths and codegen-unit hashes, so they are machine-specific and churn on changes that are not ABI changes — and stripping that metadata makes `abidiff` silently stop detecting real breaks. Wiring up the release fetch is the one piece a real project adds; see "Headers and conformance checking" in ARCHITECTURE.md.
+
 ## Scripts
 
 | Script | What it does |
 | -------- | -------------- |
-| `run.sh` | Core build + C harness + Rust app + header generation + ABI conformance — **the entry point** |
+| `run.sh` | Core build + C harness + Rust app + header generation + ABI conformance + ABI diff + leak check — **the entry point** |
 | `drift.sh` | Rebuild ONLY liba.so with changed internals; prove consumers pass untouched |
 | `build-py.sh` | Python modules, both deployment variants (shared-liba and capsule-vtable), full test battery |
 | `build-wheels.sh` | maturin wheels for the self-contained variant, installed into a fresh venv and re-tested from there |
+| `build-ft.sh` | Free-threaded (PEP 703) build of both variants + the concurrency battery; skips cleanly without a free-threaded interpreter |
 | `gen-header.sh` | cbindgen header + constants/layout/pedantic C11+C++17 assertions |
 | `size.sh` | The size ladder: four rungs measured, each rung's cost demonstrated |
 | `package.sh` | cargo-c release packaging: versioned install, pkg-config, and a consumer built against the staged tree |
 | `check-abi.sh` | Every `a-ffi` declaration must be exported by liba (name-level) |
+| `check-abidiff.sh` | Full ABI diff vs a supplied reference (libabigail, Linux) — catches signature changes the name- and layout-level checks cannot. No baseline is committed; `--self-test` proves the gate works |
+| `leaks.sh` | Harness under a leak checker (valgrind / `leaks`) — retain/release across `.so` boundaries must net to zero |
 | `miri.sh` | Scenario battery under Miri, both Stacked and Tree Borrows, plus the capsule aliasing diagnostic |
 | `cross-test.sh` | zigbuild aarch64-linux + deploy/run the harness on the imx95-pro board (DMA-BUF) |
 | (in `crates/ab-bolt`) `boltffi build` + `swiftc swifttest/Test.swift` | Swift/Kotlin module build + Swift validation (see ARCHITECTURE.md Mobile section) |

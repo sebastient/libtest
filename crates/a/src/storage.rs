@@ -5,7 +5,7 @@
 
 // The dma-buf/iosurface constants are referenced via full paths inside
 // platform-cfg'd arms, so only the common ones are imported here.
-use a_abi::{AFrameDescV1, A_STORAGE_HEAP};
+use a_abi::{AFrameDescV1, AStatus, A_STORAGE_HEAP};
 
 pub(crate) enum Storage {
     Heap(Vec<u8>),
@@ -16,16 +16,26 @@ pub(crate) enum Storage {
 }
 
 impl Storage {
-    /// Allocate zeroed storage of the given kind, or None if the kind is
-    /// unsupported on this platform / allocation failed.
-    pub(crate) fn alloc(kind: u32, len: usize) -> Option<Storage> {
+    /// Allocate zeroed storage of the given kind.
+    ///
+    /// The two failure modes are deliberately distinct, because consumers
+    /// act on them differently: `InvalidArgument` means the kind is not one
+    /// this build knows (a caller bug, and the same on every machine),
+    /// while `Unavailable` means the kind is valid here but the runtime
+    /// cannot supply one — no device node, no permission, allocator
+    /// exhausted — which a caller may legitimately skip or fall back from.
+    pub(crate) fn alloc(kind: u32, len: usize) -> Result<Storage, AStatus> {
         match kind {
-            A_STORAGE_HEAP => Some(Storage::Heap(vec![0; len])),
+            A_STORAGE_HEAP => Ok(Storage::Heap(vec![0; len])),
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            a_abi::A_STORAGE_DMABUF => dmabuf::DmaBuf::alloc(len).map(Storage::DmaBuf),
+            a_abi::A_STORAGE_DMABUF => dmabuf::DmaBuf::alloc(len)
+                .map(Storage::DmaBuf)
+                .ok_or(AStatus::Unavailable),
             #[cfg(target_os = "macos")]
-            a_abi::A_STORAGE_IOSURFACE => iosurface::Surface::alloc(len).map(Storage::IoSurface),
-            _ => None,
+            a_abi::A_STORAGE_IOSURFACE => iosurface::Surface::alloc(len)
+                .map(Storage::IoSurface)
+                .ok_or(AStatus::Unavailable),
+            _ => Err(AStatus::InvalidArgument),
         }
     }
 
@@ -185,7 +195,7 @@ impl Clone for Storage {
         let src = self.read();
         let len = src.len();
         let mut fresh =
-            Storage::alloc(self.kind(), len).unwrap_or_else(|| Storage::Heap(vec![0; len]));
+            Storage::alloc(self.kind(), len).unwrap_or_else(|_| Storage::Heap(vec![0; len]));
         fresh.write().copy_from_slice(&src);
         fresh
     }

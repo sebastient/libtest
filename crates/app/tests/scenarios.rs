@@ -360,6 +360,14 @@ fn platform_storage_descriptors() {
     }
 
     let mut d = A::new(60);
+    // A machine without an accessible platform allocator (a CI container,
+    // a desktop without the dma_heap udev rule) must not fail this test —
+    // it has nothing to say about the contract under test. An unsupported
+    // *kind*, by contrast, would still be a real failure.
+    if d.set_storage(kind) == Err(a::AStatus::Unavailable) {
+        eprintln!("skipping platform_storage_descriptors: storage unavailable here");
+        return;
+    }
     d.set_storage(kind).unwrap();
     d.fill(5);
     let fr = d.frame();

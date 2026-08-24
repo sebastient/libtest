@@ -45,7 +45,7 @@ impl BufData {
 fn make_frame(seed: u8, kind: u32) -> Frame {
     let len = FRAME_INFO.rows * FRAME_INFO.row_stride;
     let mut storage = crate::storage::Storage::alloc(kind, len)
-        .unwrap_or_else(|| crate::storage::Storage::Heap(vec![0; len]));
+        .unwrap_or_else(|_| crate::storage::Storage::Heap(vec![0; len]));
     {
         let mut w = storage.write();
         for (i, b) in w.iter_mut().enumerate() {
@@ -388,9 +388,7 @@ impl A {
     /// an error here rather than a silent heap downgrade on every frame
     /// later, when no one is watching the return value.
     pub fn set_frame_storage(&mut self, kind: u32) -> Result<(), AStatus> {
-        if crate::storage::Storage::alloc(kind, 1).is_none() {
-            return Err(AStatus::InvalidArgument);
-        }
+        crate::storage::Storage::alloc(kind, 1)?;
         self.frame_kind = kind;
         Ok(())
     }
@@ -406,11 +404,15 @@ impl A {
     }
 
     /// Reallocate the payload in the given storage kind, carrying the
-    /// current contents over. `InvalidArgument` if the kind is unsupported
-    /// on this platform.
+    /// current contents over. `InvalidArgument` if the kind is not one this
+    /// build knows; `Unavailable` if it is known but the runtime cannot
+    /// supply one here (no device node, no permission, exhausted).
+    ///
+    /// Deliberately strict where the COW and emit paths are lenient: an
+    /// explicit request to change storage must not silently succeed with a
+    /// different kind than the caller asked for.
     pub fn set_storage(&mut self, kind: u32) -> Result<(), AStatus> {
-        let mut storage = crate::storage::Storage::alloc(kind, self.payload.bytes().len())
-            .ok_or(AStatus::InvalidArgument)?;
+        let mut storage = crate::storage::Storage::alloc(kind, self.payload.bytes().len())?;
         storage
             .write()
             .copy_from_slice(&self.payload.storage.read());

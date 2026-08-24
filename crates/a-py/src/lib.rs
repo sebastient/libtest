@@ -645,7 +645,19 @@ static VTABLE: AVtableV1 = AVtableV1 {
 // rlib between the two consumers.
 use a_cshim::VTABLE;
 
-#[pymodule]
+// gil_used = false declares Py_mod_gil = Py_MOD_GIL_NOT_USED, so a
+// free-threaded interpreter keeps the GIL disabled when it imports this
+// module instead of silently re-enabling it. PyO3 gates the whole
+// mechanism behind #[cfg(all(not(Py_LIMITED_API), Py_GIL_DISABLED))], so
+// on the abi3/GIL build this attribute compiles to nothing -- one source
+// tree, no cargo feature, and no way to assert it against an interpreter
+// that would not honour it.
+//
+// This is an UNCONDITIONAL claim of thread-safety: get it wrong and the
+// failure mode is a silent data race, not a warning. The evidence is
+// py/test_ft.py, which must pass on a free-threaded build before this
+// line is allowed to stay.
+#[pymodule(gil_used = false)]
 #[pyo3(name = "a")]
 fn a_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Same quiet-hook policy as liba: a shielded panic is an ordinary error

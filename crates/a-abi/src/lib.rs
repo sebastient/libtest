@@ -40,6 +40,19 @@ pub enum AStatus {
     /// older consumer built before it existed maps it to `Unknown` and
     /// treats it as fatal — safe, it merely loses the retry hint.
     Busy = -3,
+    /// The requested resource kind is known and valid on this platform, but
+    /// the runtime cannot provide one right now: the backing device node is
+    /// absent or unreadable (`/dev/dma_heap`, `EACCES`), or the allocator is
+    /// exhausted. Distinct from `InvalidArgument`, which means the caller
+    /// named a kind this build does not know at all — a caller bug. The
+    /// split exists because consumers must be able to tell "skip this on
+    /// this box" from "fix your code"; collapsing both into
+    /// `InvalidArgument` made every platform-storage consumer treat an
+    /// unprivileged CI container as a test failure. Appended under the same
+    /// append-only rule as `Busy`: no layout change, so no `A_ABI_VERSION`
+    /// bump, and an older consumer maps it to `Unknown` and treats it as
+    /// fatal — safe, it merely loses the skip hint.
+    Unavailable = -4,
     /// Never sent over the wire: represents a code appended by a newer
     /// library that this build does not recognize. Treat like `Panic`.
     Unknown = i32::MIN,
@@ -54,6 +67,7 @@ impl AStatus {
             -1 => AStatus::Panic,
             -2 => AStatus::InvalidArgument,
             -3 => AStatus::Busy,
+            -4 => AStatus::Unavailable,
             _ => AStatus::Unknown,
         }
     }
@@ -71,6 +85,7 @@ impl core::fmt::Display for AStatus {
             AStatus::Panic => "internal panic caught at the library boundary",
             AStatus::InvalidArgument => "invalid argument",
             AStatus::Busy => "target is exclusively borrowed elsewhere",
+            AStatus::Unavailable => "resource kind unavailable in this environment",
             AStatus::Unknown => "unrecognized status code from a newer library",
         };
         f.write_str(text)

@@ -63,3 +63,19 @@ fi
 echo
 echo "== ABI conformance (a-ffi declarations vs liba exports) =="
 ./check-abi.sh
+
+echo
+echo "== Full ABI diff: the gate, self-tested (libabigail) =="
+# The third conformance layer: check-abi.sh compares names and gen-header.sh
+# asserts struct layouts, but only a type-level diff catches an existing
+# export whose parameter type changed underneath its unchanged name.
+#
+# --self-test rather than a comparison, because a real gate diffs against
+# the PREVIOUS RELEASE and this reference implementation has none. What runs
+# here proves the gate works; supplying the artifact is the one piece a real
+# project adds (./check-abidiff.sh <previous-liba.so>).
+./check-abidiff.sh --self-test
+
+echo
+echo "== Refcount balance across the .so boundary (leak checker) =="
+./leaks.sh

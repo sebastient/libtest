@@ -14,9 +14,22 @@ crates/*/dist/
 # by build-py.sh. The .pyi stubs and test battery beside them are sources.
 py/v1/
 py/v2/
+# Free-threaded builds of the same two variants; produced by build-ft.sh.
+py/ft/
+py/ft2/
 
-# Python virtualenv, created on demand by build-py.sh.
+# Python virtualenvs, created on demand by build-py.sh / build-ft.sh.
 /venv/
+/venv-ft/
+
+# Generated ABI dumps. Deliberately NOT committed: libabigail's XML bakes in
+# absolute build paths and per-codegen-unit hashes, so the file is
+# machine-specific and churns by ~300 lines on changes that abidiff itself
+# correctly reports as no ABI change. Stripping that metadata to stop the
+# churn makes abidiff silently stop detecting real breaks -- see
+# "Full ABI diff" in ARCHITECTURE.md. The hand-written abi/*.abignore
+# suppression files ARE sources and are committed.
+abi/*.abi
 
 # .NET build output; the .csproj and Program.cs are sources.
 cstest/bin/

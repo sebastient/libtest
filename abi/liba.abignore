@@ -1,0 +1,22 @@
+# libabigail suppression specification for liba.so.
+#
+# WHY THIS FILE EXISTS
+# abidiff reads DWARF, which describes the COMPLETE Rust struct. It has no
+# way to know that cbindgen emitted these types into liba.h as forward
+# declarations only, so a C consumer can never do anything with one but hold
+# a pointer to it. Their internal layout is therefore not part of the ABI --
+# changing it is exactly what drift.sh exists to prove is safe, and a gate
+# that fired on it would be switched off within a week.
+#
+# This file is the machine-readable form of the "opaque handle" boundary
+# rule the architecture states in prose. Adding a type here is a deliberate
+# ABI decision: it asserts the type is reachable ONLY behind a pointer. A
+# type whose definition appears in liba.h must never be listed.
+
+[suppress_type]
+  name = a::static_impl::A
+  # AHandle. Opaque; see the `v2` feature for the layout-drift proof.
+
+[suppress_type]
+  name = a_abi::ABuf
+  # ABuf. Opaque refcounted snapshot handle.
